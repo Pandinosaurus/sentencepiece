@@ -48,9 +48,9 @@ TrainerResult RunTrainer(const std::vector<std::string>& input, int size,
                          const bool use_dp = false, const float dp_noise = 0.0,
                          const uint32 dp_clip = 0) {
   const std::string input_file =
-      util::JoinPath(absl::GetFlag(FLAGS_test_tmpdir), "input");
+      util::JoinPath(::testing::TempDir(), "input");
   const std::string model_prefix =
-      util::JoinPath(absl::GetFlag(FLAGS_test_tmpdir), "model");
+      util::JoinPath(::testing::TempDir(), "model");
   {
     auto output = filesystem::NewWritableFile(input_file);
     for (const auto& line : input) {
@@ -106,6 +106,7 @@ TrainerResult RunTrainer(const std::vector<std::string>& input, int size,
 
   TrainerResult res;
   res.seed_pieces_and_probs = seed_pieces;
+  std::sort(pieces.begin(), pieces.end());
   res.sentence_pieces = absl::StrJoin(pieces, " ");
   return res;
 }
@@ -120,7 +121,7 @@ TEST(UnigramTrainerTest, BasicTest) {
   EXPECT_EQ(27, res.seed_pieces_and_probs.size());
 
   // Check final pieces.
-  EXPECT_EQ("i a n y m l e apple ve O P r t g an v ▁ A b le ▁an p d h",
+  EXPECT_EQ("A O P a an apple b d e g h i l le m n p r t v ve y ▁ ▁an",
             res.sentence_pieces);
 }
 
@@ -153,13 +154,13 @@ static constexpr char kTestInputData[] = "wagahaiwa_nekodearu.txt";
 
 TEST(UnigramTrainerTest, EndToEndTest) {
   const std::string input =
-      util::JoinPath(absl::GetFlag(FLAGS_test_srcdir), kTestInputData);
+      util::JoinPath(::testing::SrcDir(), kTestInputData);
 
   ASSERT_TRUE(
       SentencePieceTrainer::Train(
           absl::StrCat(
               "--model_prefix=",
-              util::JoinPath(absl::GetFlag(FLAGS_test_tmpdir), "tmp_model"),
+              util::JoinPath(::testing::TempDir(), "tmp_model"),
               " --input=", input,
               " --vocab_size=8000 --normalization_rule_name=identity",
               " --model_type=unigram --user_defined_symbols=<user>",
@@ -167,7 +168,7 @@ TEST(UnigramTrainerTest, EndToEndTest) {
           .ok());
 
   SentencePieceProcessor sp;
-  EXPECT_TRUE(sp.Load(util::JoinPath(absl::GetFlag(FLAGS_test_tmpdir),
+  EXPECT_TRUE(sp.Load(util::JoinPath(::testing::TempDir(),
                                      "tmp_model.model"))
                   .ok());
   EXPECT_EQ(8000, sp.GetPieceSize());
@@ -191,12 +192,13 @@ TEST(UnigramTrainerTest, EndToEndTest) {
                   .ok());
   // TODO(taku): Temporally disable this test on Windows.
 #ifndef OS_WIN
-  EXPECT_EQ(WS
-            " 吾輩 《 わが はい 》 は 猫 である 。 名前 はまだ 無い 。 "
-            "どこ で 生 れた か とん と 見当 《 けん とう 》 が つか ぬ 。 "
-            "何でも 薄 暗 い じめ じめ した 所で ニャーニャー "
-            "泣 い ていた 事 だけは 記憶 している 。",
-            absl::StrJoin(tok, " "));
+  LOG(INFO) << "[" << absl::StrJoin(tok, " ") << std::endl;
+  EXPECT_EQ(
+      WS
+      " 吾輩 《 わが はい 》 は猫である 。 名前はまだ 無 い 。 どこ で 生 れた "
+      "か とん と 見当 《 けん とう 》 が つか ぬ 。 何でも 薄 暗 い じめ じめ "
+      "した 所で ニャーニャー 泣 い ていた 事 だけは 記憶 している 。",
+      absl::StrJoin(tok, " "));
 #endif
 }
 

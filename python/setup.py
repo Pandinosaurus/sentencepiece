@@ -14,14 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.!
 
-from setuptools import setup, Extension
-from setuptools.command.build_ext import build_ext as _build_ext
-from setuptools.command.build_py import build_py as _build_py
 import codecs
+import os
 import string
 import subprocess
 import sys
-import os
+import platform
+from setuptools import Extension, setup
+from setuptools.command.build_ext import build_ext as _build_ext
+from setuptools.command.build_py import build_py as _build_py
 
 sys.path.append(os.path.join('.', 'test'))
 
@@ -78,8 +79,6 @@ class build_ext(_build_ext):
 
   def build_extension(self, ext):
     cflags, libs = get_cflags_and_libs('../build/root')
-    if len(libs) == 0:
-      cflags, libs = get_cflags_and_libs('./bundled/root')
 
     if len(libs) == 0:
       if is_sentencepiece_installed():
@@ -87,7 +86,7 @@ class build_ext(_build_ext):
         libs = run_pkg_config('libs')
       else:
         subprocess.check_call(['./build_bundled.sh', __version__])
-        cflags, libs = get_cflags_and_libs('./bundled/root')
+        cflags, libs = get_cflags_and_libs('./build/root')
 
     # Fix compile on some versions of Mac OSX
     # See: https://github.com/neulab/xnmt/issues/199
@@ -96,6 +95,8 @@ class build_ext(_build_ext):
     else:
       cflags.append('-Wl,-strip-all')
       libs.append('-Wl,-strip-all')
+    if sys.platform == 'linux':
+      libs.append('-Wl,-Bsymbolic')
     print('## cflags={}'.format(' '.join(cflags)))
     print('## libs={}'.format(' '.join(libs)))
     ext.extra_compile_args = cflags
@@ -103,22 +104,65 @@ class build_ext(_build_ext):
     _build_ext.build_extension(self, ext)
 
 
-if os.name == 'nt':
-  # Must pre-install sentencepice into bundled directory.
+def get_win_arch():
   arch = 'win32'
   if sys.maxsize > 2**32:
     arch = 'amd64'
+  if 'arm' in platform.machine().lower():
+    arch = 'arm64'
+  if os.getenv('PYTHON_ARCH', '') == 'ARM64':
+    # Special check for arm64 under ciwheelbuild, see https://github.com/pypa/cibuildwheel/issues/1942
+    arch = 'arm64'
+  return arch
+
+
+if os.name == 'nt':
+  # Must pre-install sentencepice into build directory.
+  arch = get_win_arch()
   if os.path.exists('..\\build\\root_{}\\lib'.format(arch)):
     cflags = ['/std:c++17', '/I..\\build\\root_{}\\include'.format(arch)]
     libs = [
         '..\\build\\root_{}\\lib\\sentencepiece.lib'.format(arch),
         '..\\build\\root_{}\\lib\\sentencepiece_train.lib'.format(arch),
     ]
-  else:
+  elif os.path.exists('..\\build\\root\\lib'):
     cflags = ['/std:c++17', '/I..\\build\\root\\include']
     libs = [
         '..\\build\\root\\lib\\sentencepiece.lib',
         '..\\build\\root\\lib\\sentencepiece_train.lib',
+    ]
+  else:
+    # build library locally with cmake and vc++.
+    cmake_arch = 'Win32'
+    if arch == 'amd64':
+      cmake_arch = 'x64'
+    elif arch == "arm64":
+      cmake_arch = "ARM64"
+    subprocess.check_call([
+        'cmake',
+        'sentencepiece',
+        '-A',
+        cmake_arch,
+        '-B',
+        'build',
+        '-DSPM_ENABLE_SHARED=OFF',
+        '-DCMAKE_INSTALL_PREFIX=build\\root',
+    ])
+    subprocess.check_call([
+        'cmake',
+        '--build',
+        'build',
+        '--config',
+        'Release',
+        '--target',
+        'install',
+        '--parallel',
+        '8',
+    ])
+    cflags = ['/std:c++17', '/I.\\build\\root\\include']
+    libs = [
+        '.\\build\\root\\lib\\sentencepiece.lib',
+        '.\\build\\root\\lib\\sentencepiece_train.lib',
     ]
 
   SENTENCEPIECE_EXT = Extension(
@@ -167,4 +211,5 @@ setup(
         'Topic :: Software Development :: Libraries :: Python Modules',
     ],
     test_suite='sentencepiece_test.suite',
+    tests_require=['pytest'],
 )

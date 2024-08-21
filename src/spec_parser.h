@@ -144,6 +144,7 @@ inline std::string PrintProto(const TrainerSpec &message,
   PRINT_PARAM(split_by_number);
   PRINT_PARAM(split_by_whitespace);
   PRINT_PARAM(split_digits);
+  PRINT_PARAM(pretokenization_delimiter);
   PRINT_PARAM(treat_whitespace_as_suffix);
   PRINT_PARAM(allow_whitespace_only_pieces);
   PRINT_REPEATED_STRING(control_symbols);
@@ -152,6 +153,7 @@ inline std::string PrintProto(const TrainerSpec &message,
   PRINT_PARAM(byte_fallback);
   PRINT_PARAM(vocabulary_output_piece_score);
   PRINT_PARAM(train_extremely_large_corpus);
+  PRINT_PARAM(seed_sentencepieces_file);
   PRINT_PARAM(hard_vocab_limit);
   PRINT_PARAM(use_all_vocab);
   PRINT_PARAM(unk_id);
@@ -222,6 +224,7 @@ util::Status SentencePieceTrainer::SetProtoField(absl::string_view name,
   PARSE_BOOL(split_by_number);
   PARSE_BOOL(split_by_whitespace);
   PARSE_BOOL(split_digits);
+  PARSE_STRING(pretokenization_delimiter);
   PARSE_BOOL(treat_whitespace_as_suffix);
   PARSE_BOOL(allow_whitespace_only_pieces);
   PARSE_REPEATED_STRING(control_symbols);
@@ -231,6 +234,7 @@ util::Status SentencePieceTrainer::SetProtoField(absl::string_view name,
   PARSE_BOOL(hard_vocab_limit);
   PARSE_BOOL(vocabulary_output_piece_score);
   PARSE_BOOL(train_extremely_large_corpus);
+  PARSE_STRING(seed_sentencepieces_file);
   PARSE_BOOL(use_all_vocab);
   PARSE_INT32(unk_id);
   PARSE_INT32(bos_id);

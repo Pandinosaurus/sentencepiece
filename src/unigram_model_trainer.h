@@ -68,7 +68,7 @@ class Trainer : public TrainerInterface {
       : TrainerInterface::TrainerInterface(trainer_spec, normalizer_spec,
                                            denormalizer_spec) {}
 
-  TrainerModel::SentencePieces MakeSeedSentencePieces() const;
+  TrainerModel::SentencePieces MakeSeedSentencePieces();
 
   util::Status Train() override;
 
@@ -80,7 +80,7 @@ class Trainer : public TrainerInterface {
   // node_int_type should be of integer type (int32 or int64),
   // determined by train_extremely_large_corpus.
   template <typename node_int_type>
-  TrainerModel::SentencePieces MakeSeedSentencePiecesInternal() const;
+  TrainerModel::SentencePieces MakeSeedSentencePiecesInternal();
 
   // Executes the E step of EM and returns expected count.
   // The index of return array is the vocab id.

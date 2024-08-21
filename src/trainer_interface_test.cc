@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.!
 
+#include "trainer_interface.h"
+
 #include <utility>
 
 #include "filesystem.h"
 #include "testharness.h"
 #include "third_party/absl/strings/str_cat.h"
 #include "third_party/absl/strings/str_format.h"
-#include "trainer_interface.h"
 #include "util.h"
 
 namespace sentencepiece {
@@ -72,7 +73,7 @@ TEST(TrainerInterfaceTest, IsValidSentencePieceTest) {
   EXPECT_FALSE(IsValid("F1"));
   EXPECT_FALSE(IsValid("1F"));
   EXPECT_FALSE(IsValid("1A2"));
-  EXPECT_TRUE(IsValid("$10"));  // $ and 1 are both "common" script.
+  EXPECT_TRUE(IsValid("$10"));      // $ and 1 are both "common" script.
   EXPECT_FALSE(IsValid("$ABC"));
   EXPECT_FALSE(IsValid("ab\tbc"));  // "\t" is UPP boundary.
   EXPECT_FALSE(IsValid("ab cd"));
@@ -112,6 +113,26 @@ TEST(TrainerInterfaceTest, IsValidSentencePieceTest) {
   EXPECT_TRUE(IsValid("F1"));
   EXPECT_TRUE(IsValid("$10"));
   EXPECT_TRUE(IsValid("$ABC"));
+
+  trainer_spec.set_split_by_unicode_script(true);
+  trainer_spec.set_split_by_number(true);
+  EXPECT_FALSE(IsValid("F1"));
+  EXPECT_TRUE(IsValid("$10"));
+
+  trainer_spec.set_split_by_unicode_script(true);
+  trainer_spec.set_split_by_number(false);
+  EXPECT_TRUE(IsValid("F1"));
+  EXPECT_TRUE(IsValid("$10"));
+
+  trainer_spec.set_split_by_unicode_script(false);
+  trainer_spec.set_split_by_number(true);
+  EXPECT_TRUE(IsValid("F1"));
+  EXPECT_TRUE(IsValid("$10"));
+
+  trainer_spec.set_split_by_unicode_script(false);
+  trainer_spec.set_split_by_number(false);
+  EXPECT_TRUE(IsValid("F1"));
+  EXPECT_TRUE(IsValid("$10"));
 
   trainer_spec.set_max_sentencepiece_length(4);
   EXPECT_TRUE(IsValid("1234"));
@@ -472,7 +493,7 @@ TEST(TrainerInterfaceTest, SerializeTest) {
 
 TEST(TrainerInterfaceTest, CharactersTest) {
   const std::string input_file =
-      util::JoinPath(absl::GetFlag(FLAGS_test_tmpdir), "input");
+      util::JoinPath(::testing::TempDir(), "input");
   {
     auto output = filesystem::NewWritableFile(input_file);
     // Make a single line with 50 "a", 49 "あ", and 1 "b".
@@ -538,7 +559,7 @@ TEST(TrainerInterfaceTest, MultiFileSentenceIteratorTest) {
   std::vector<std::string> files;
   std::vector<std::string> expected;
   for (int i = 0; i < 10; ++i) {
-    const std::string file = util::JoinPath(absl::GetFlag(FLAGS_test_tmpdir),
+    const std::string file = util::JoinPath(::testing::TempDir(),
                                             absl::StrCat("input", i));
     auto output = filesystem::NewWritableFile(file);
     int num_line = (rand() % 100) + 1;
@@ -560,7 +581,7 @@ TEST(TrainerInterfaceTest, MultiFileSentenceIteratorTest) {
 TEST(TrainerInterfaceTest, MultiFileSentenceIteratorErrorTest) {
   std::vector<std::string> files;
   for (int i = 0; i < 10; ++i) {
-    const std::string file = util::JoinPath(absl::GetFlag(FLAGS_test_tmpdir),
+    const std::string file = util::JoinPath(::testing::TempDir(),
                                             absl::StrCat("input_not_exist", i));
     files.push_back(file);
   }

@@ -8,6 +8,9 @@ on:
   pull_request:
     branches: [ master ]
 
+permissions:
+  contents: read
+
 jobs:
   build_wheels:
     outputs:
@@ -20,15 +23,18 @@ jobs:
     runs-on: ${{ matrix.os }}
     name: Build wheels on ${{ matrix.os }}
 
+    permissions:
+      contents: write # svenstaro/upload-release-action 
+
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+      - uses: actions/setup-python@39cd14951b08e74b54015e9e001cdefcf80e669f # v5.1.1
         with:
           python-version: "3.x"
 
       - name: Set up QEMU
         if: runner.os == 'Linux'
-        uses: docker/setup-qemu-action@v1
+        uses: docker/setup-qemu-action@49b3bc8e6bdd4a60e6116a5414239cba5943d3cf # v3.2.0
         with:
           platforms: arm64
 
@@ -39,6 +45,8 @@ jobs:
           cmake --build ${{github.workspace}}/build_win32 --config Release --target install --parallel 8
           cmake -A x64   -B ${{github.workspace}}/build_amd64 -DSPM_ENABLE_SHARED=OFF -DCMAKE_INSTALL_PREFIX=${{github.workspace}}/build/root_amd64
           cmake --build ${{github.workspace}}/build_amd64 --config Release --target install --parallel 8
+          cmake -A arm64 -B ${{github.workspace}}/build_arm64 -DSPM_ENABLE_SHARED=OFF -DCMAKE_INSTALL_PREFIX=${{github.workspace}}/build/root_arm64
+          cmake --build ${{github.workspace}}/build_arm64 --config Release --target install --parallel 8
 
       - name: Build for Mac
         if: runner.os == 'macOS'
@@ -51,9 +59,8 @@ jobs:
       - name: Install cibuildwheel
         working-directory: ${{github.workspace}}/python
         run: |
-          python -m pip install --upgrade pip
-          pip install setuptools wheel twine
-          python -m pip install cibuildwheel==2.12.0
+          python -m pip install --require-hashes --no-dependencies -r ../.github/workflows/requirements/base.txt
+          python -m pip install --require-hashes --no-dependencies -r ../.github/workflows/requirements/cibuildwheel.txt
 
       - name: Build wheels
         working-directory: ${{github.workspace}}/python
@@ -61,26 +68,39 @@ jobs:
         env:
           CIBW_ARCHS_LINUX: auto aarch64
           CIBW_ARCHS_MACOS: x86_64 universal2 arm64
+          CIBW_ARCHS_WINDOWS: auto ARM64
           CIBW_SKIP: "pp* *-musllinux_*"
           CIBW_BUILD_VERBOSITY: 1
 
-      - name: Build sdist
+      - name: Build sdist archive
+        working-directory: ${{github.workspace}}/python
+        run: sh build_sdist.sh
+
+      - name: Fetch sdist archive
+        uses: tj-actions/glob@2944188f585a0ec102a6a82d9eeb3aed69785393 # v22.0.1
+        id: sdist
+        with:
+          files: ./python/dist/*.tar.gz
+
+      - name: Build wheel from sdist
+        run: python -m pip wheel "${{ steps.sdist.outputs.paths }}" --verbose
+
+      - name: Copy sdist
         working-directory: ${{github.workspace}}/python
         if: runner.os == 'macOS'
-        run: |
-          python setup.py sdist
-          cp -f dist/*.tar.gz wheelhouse/
+        run: cp -f dist/*.tar.gz wheelhouse/
 
       - name: Upload artifact
         uses: actions/upload-artifact@v3
         with:
+          name: artifacts
           path: |
             ./python/wheelhouse/*.whl
-            ./python/dist/*.tar.gz
+            ./python/wheelhouse/*.tar.gz
 
       - name: Upload wheel release
         if: startsWith(github.ref, 'refs/tags/')
-        uses: svenstaro/upload-release-action@v2
+        uses: svenstaro/upload-release-action@04733e069f2d7f7f0b4aebc4fbdbce8613b03ccd # v2.9.0
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: ./python/wheelhouse/*
@@ -92,17 +112,17 @@ jobs:
       - name: Generate SLSA subjects - Macos
         id: hash-macos
         if: runner.os == 'macOS'
-        run: echo "::set-output name=digests::$(shasum -a 256 ./python/wheelhouse/* | base64)"
+        run: echo "digests=$(shasum -a 256 ./python/wheelhouse/* | base64)" >> $GITHUB_OUTPUT
 
       - name: Generate SLSA subjects - Linux
         id: hash-linux
         if: runner.os == 'Linux'
-        run: echo "::set-output name=digests::$(sha256sum ./python/wheelhouse/* | base64 -w0)"
+        run: echo "digests=$(sha256sum ./python/wheelhouse/* | base64 -w0)" >> $GITHUB_OUTPUT
 
       - name: Generate SLSA subjects - Windows
         id: hash-windows
         if: runner.os == 'Windows'
-        run: echo "::set-output name=digests::$(sha256sum ./python/wheelhouse/* | base64 -w0)"
+        run: echo "digests=$(sha256sum ./python/wheelhouse/* | base64 -w0)" >> $GITHUB_OUTPUT
 
   gather-disgests:
     needs: [build_wheels]
@@ -121,7 +141,7 @@ jobs:
           echo "$LINUX_DIGESTS" | base64 -d > checksums.txt
           echo "$MACOS_DIGESTS" | base64 -d >> checksums.txt
           echo "$WINDOWS_DIGESTS" | base64 -d >> checksums.txt
-          echo "::set-output name=digests::$(cat checksums.txt | base64 -w0)"
+          echo "digests=$(cat checksums.txt | base64 -w0)" >> $GITHUB_OUTPUT
 
   provenance:
     if: startsWith(github.ref, 'refs/tags/')
@@ -130,7 +150,7 @@ jobs:
       actions: read   # To read the workflow path.
       id-token: write # To sign the provenance.
       contents: write # To add assets to a release.
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v1.2.0
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.0.0
     with:
       base64-subjects: "${{ needs.gather-disgests.outputs.digests }}"
       upload-assets: true # Optional: Upload to a new release

@@ -36,16 +36,6 @@
 #include <pthread.h>
 #endif
 
-#if defined(_FREEBSD)
-#include <sys/endian.h>
-#endif
-#if !defined(__APPLE__) && !defined(_WIN32) && !defined(_FREEBSD)
-#include <endian.h>
-#if BYTE_ORDER == __BIG_ENDIAN
-#define IS_BIG_ENDIAN
-#endif
-#endif
-
 namespace sentencepiece {
 template <typename T>
 std::ostream &operator<<(std::ostream &out, const std::vector<T> &v) {
@@ -350,6 +340,10 @@ std::string StrError(int errnum);
 
 std::vector<std::string> StrSplitAsCSV(absl::string_view text);
 
+#ifdef OS_WIN
+std::wstring Utf8ToWide(const absl::string_view input);
+#endif
+
 inline Status OkStatus() { return Status(); }
 
 #define DECLARE_ERROR(FUNC)                                \
@@ -411,10 +405,6 @@ class StatusBuilder {
 #define CHECK_GT_OR_RETURN(a, b) CHECK_OR_RETURN((a) > (b))
 #define CHECK_LT_OR_RETURN(a, b) CHECK_OR_RETURN((a) < (b))
 
-#ifdef IS_BIG_ENDIAN
-inline uint32 Swap32(uint32 x) { return __builtin_bswap32(x); }
-#endif
-
 }  // namespace util
 
 namespace port {
@@ -442,5 +432,11 @@ class ThreadPool {
  private:
   std::vector<std::thread> tasks_;
 };
+
+namespace log_domain {
+
+double LogSum(const std::vector<double> &xs);
+
+}  // namespace log_domain
 }  // namespace sentencepiece
 #endif  // UTIL_H_
